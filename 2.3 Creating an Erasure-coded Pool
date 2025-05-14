@@ -1,0 +1,19 @@
+Create an erasure-coded pool object_test and set the number of data chunks to 4 and the
+number of coding chunks to 2.
+Step 1 Create the erasure coding rule for the pool.
+Create an erasure coding rule test and set the number of data chunks to 4 and the
+number of coding chunks to 2. To avoid errors, you are advised to set the failure domain
+to osd in this lab environment. The specific command is as follows:
+[ceph: root@ceph01 /]# ceph osd erasure-code-profile set test k=4 m=2 crush-failure-domain=osd
+wallah u a3lam ama bo nardniaty w agar btwawe bigeritawa
+cecph osd erasure-codeprofile get test
+
+
+Step 2 Create the erasure-coded pool.
+Create the pool using the created erasure coding rule.
+[ceph: root@ceph01 /]# ceph osd pool create object_test erasure test
+
+Step 3 Set the resource pool type.
+Set the type of the created resource pool to rgw.
+[ceph: root@ceph01 /]# ceph osd pool application enable object_test rgw
+
