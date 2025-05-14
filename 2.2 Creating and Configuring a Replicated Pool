@@ -1,0 +1,199 @@
+This section covers basic resource pool management, and operations include: create and
+rename a resource pool, modify its configurations, upload and download objects, and
+create snapshots.
+
+
+
+Step 1 Create a replicated pool named test.
+Create the replicated pool test and retain the default settings.
+[ceph: root@ceph01 /]# ceph osd pool create test
+pool 'test' created
+
+
+After the resource pool is created, query the pool information.
+[ceph: root@ceph01 /]# ceph osd pool ls detail | grep test
+pool 2 'test' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 32 pgp_num 32
+autoscale_mode on last_change 74 flags hashpspool stripe_width 0
+
+Or, run the following command to query more detailed information about the resource
+pool:
+
+
+[ceph: root@ceph01 /]# ceph osd pool get test all
+size: 3
+min_size: 2
+pg_num: 32
+pgp_num: 32
+crush_rule: replicated_rule
+hashpspool: true
+nodelete: false
+nopgchange: false
+nosizechange: false
+write_fadvise_dontneed: false
+noscrub: false
+nodeep-scrub: false
+use_gmt_hitset: 1
+fast_read: 0
+pg_autoscale_mode: on
+bulk: false
+
+
+
+Step 2 Modify a resource pool.
+According to Ceph suggestions, the recommended number of PGs is 256. Run the
+following command to change the number of PGs to 256:
+[ceph: root@ceph01 /]# ceph osd pool set test pg_num 256
+set pool 2 pg_num to 256
+Run the ceph osd pool get test all command multiple times to view the adjustment
+process of pg_num and pgp_num.
+[ceph: root@ceph01 /]# ceph osd pool get test all
+size: 3
+min_size: 2
+pg_num: 99
+pgp_num: 93
+crush_rule: replicated_rule
+hashpspool: true
+nodelete: false
+nopgchange: false
+nosizechange: false
+write_fadvise_dontneed: false
+noscrub: false
+nodeep-scrub: false
+use_gmt_hitset: 1
+fast_read: 0
+pg_autoscale_mode: on
+bulk: false
+
+
+
+
+After a period of time, the number of PGs is adjusted.
+[ceph: root@ceph01 /]# ceph osd pool get test all
+size: 3
+min_size: 2
+pg_num: 256
+pgp_num: 256
+crush_rule: replicated_rule
+hashpspool: true
+nodelete: false
+nopgchange: false
+nosizechange: false
+write_fadvise_dontneed: false
+noscrub: false
+nodeep-scrub: false
+use_gmt_hitset: 1
+fast_read: 0
+pg_autoscale_mode: on
+bulk: false
+
+
+Question: When adjusting the value of pg_num, should pgp_num or pg_num be
+adjusted first? And Why?
+Answer: pgp_num should take priority, because it is the permutation and combination of
+OSDs. PGs can find the corresponding OSD for data storage only after pgp_num is
+adjusted.
+Question: Will pg_num remain unchanged after it is changed to 256?
+Answer: Because pg_autoscale_mode is enabled, the Ceph cluster automatically changes
+pg_num to an appropriate value based on the amount of data stored in the resource
+pool.
+
+
+
+Step 3 Change the value of min_size.
+The default value of min_size is 2, indicating that data can be read and written only
+when at least two replicas are available. This ensures data consistency but reduces data
+availability. Run the following command to change the value to 1:
+[ceph: root@ceph01 /]# ceph osd pool set test min_size 1
+set pool 2 min_size to 1
+
+
+Step 4 Rename the resource pool.
+Rename the resource pool test to test_rbd.
+[ceph: root@ceph01 /]# ceph osd pool rename test test_rbd
+pool 'test' renamed to 'test_rbd'
+
+
+
+Step 5 Use RADOS commands to perform simple operations on objects.
+Upload the /etc/hosts file to test_rbd.
+[ceph: root@ceph01 /]# rados -p test_rbd put hosts /etc/hosts
+Next, run the following command to query the existing objects in the resource pool:
+[ceph: root@ceph01 /]# rados -p test_rbd ls
+hosts
+
+
+
+Step 6 (Optional) Query the disk where the uploaded object resides.
+Run the following commands to view the OSD mapped to the hosts object:
+[ceph: root@ceph01 /]# ceph osd map test_rbd hosts
+osdmap e3478 pool 'test_rbd' (2) object 'hosts' -> pg 2.ea1b298e (2.e) -> up ([4,2,3], p4) acting
+([4,2,3], p4)
+In the command output, [4,2,3] indicates the OSD ID. You can view the corresponding
+hard disk based on the OSD ID.
+[ceph: root@ceph01 /]# ceph device ls
+
+
+Step 7 Create a snapshot for the resource pool.
+Run the following commands to create snapshot snapshot1 for resource pool test_rbd:
+[ceph: root@ceph01 /]# ceph osd pool mksnap test_rbd snapshot1
+created pool test_rbd snap snapshot1
+
+
+
+
+Step 8 Delete objects.
+Run the following command to delete the object:
+[ceph: root@ceph01 /]# rados -p test_rbd rm hosts
+[ceph: root@ceph01 /]# rados -p test_rbd ls
+hosts
+[ceph: root@ceph01 /]# rados -p test_rbd rm hosts
+error removing test_rbd>hosts: (2) No such file or directory
+Question: Why the hosts object is still displayed in the ls command output, even after it is
+deleted?
+Answer: After the hosts object is deleted, Ceph does not delete it immediately. Instead,
+Ceph marks it as "deleted". The hosts object stays in the ls command output, but it
+cannot be read or written.
+
+
+
+Step 9 Restore an object using a snapshot.
+Run the following command to check if there is a corresponding object in the snapshot:
+[ceph: root@ceph01 /]# rados -p test_rbd -s snapshot1 ls
+
+If there is, download the object from the snapshot to the local host and name it hostsobj:
+[ceph: root@ceph01 /]# rados -p test_rbd -s snapshot1 get hosts hosts-obj
+selected snap 3 'snapshot1'
+
+Run the RADOS put command to upload the object to the resource pool and name the
+object hosts.
+[ceph: root@ceph01 /]# rados -p test_rbd put hosts /hosts-obj
+
+Run the RADOS get command to download object hosts and name it hosts_test. Confirm
+the object is restored.
+[ceph: root@ceph01 /]# rados -p test_rbd get hosts hosts_test
+
+
+Step 10 Set resource pool quotas.
+Set the maximum number of objects that can be uploaded to test_rbd to 5.
+[ceph: root@ceph01 /]# ceph osd pool set-quota test_rbd max_objects 5
+set-quota max_objects = 5 for pool test_rbd
+Upload three more objects to the test_rbd resource pool.
+:
+ceph osd pool set-quota test_rbd max_objects 5
+rados -p tesx-rdb put hosts1 /etc/hosts
+rados -p tesx-rdb put hosts2 /etc/hosts
+rados -p tesx-rdb put hosts3 /etc/hosts
+rados -p tesx-rdb put hosts4 /etc/hosts
+rados -p tesx-rdb put hosts5 /etc/hosts
+
+Step 11 Delete a resource pool.
+Enable the option of deleting resource pools.
+[ceph: root@ceph01 /]# ceph config set mon mon_allow_pool_delete true
+Delete the test_rbd resource pool.
+[ceph: root@ceph01 /]# ceph osd pool rm test_rbd test_rbd --yes-i-really-really-mean-it
+
+
+
+
+
+
